@@ -510,7 +510,7 @@ def transcribe(request: Request, file_path):
         return data
     elif request.app.state.config.STT_ENGINE == "openai":
         audio_format = get_audio_format(file_path)
-        if audio_format:
+        if (audio_format):
             os.rename(file_path, file_path.replace(".wav", f".{audio_format}"))
             # Convert unsupported audio file to WAV format
             convert_audio_to_wav(
