@@ -11,6 +11,7 @@
 	import { toast } from 'svelte-sonner';
 
 	import { getContext, setContext, onDestroy, onMount, tick } from 'svelte';
+	import { createInitialChatRead } from '$lib/utils/chatSnapshot';
 	import { fade } from 'svelte/transition';
 	const i18n: Writable<i18nType> = getContext('i18n');
 
@@ -1368,6 +1369,7 @@
 	let joinedChatId = '';
 	let liveParticipants: { id: string; name: string }[] = [];
 	const clearPresence = () => (liveParticipants = []);
+	let initialChatRead: ReturnType<typeof createInitialChatRead> | null = null;
 	let chatRefresh: { id: string; promise: Promise<void> } | null = null;
 	let typingUsers: { id: string; name: string }[] = [];
 	let typingUsersTimeout: Record<string, ReturnType<typeof setTimeout>> = {};
@@ -1500,6 +1502,10 @@
 		if (next && socket)
 			socket.emit('events:chat', { chat_id: next, data: { type: 'join' } }, (accepted: boolean) => {
 				if (!socket.connected || socket.id !== connectionId || $chatId !== next) return;
+				// The first snapshot starts after acceptance, so it already covers this join.
+				if (accepted && initialChatRead?.id === next && initialChatRead.acceptJoin()) {
+					return;
+				}
 				if (!accepted) clearPresence();
 				// A refused join can mean access was lost; the refresh then sends the reader home.
 				void refreshChat();
@@ -2994,6 +3000,10 @@
 			terminalContext = null;
 			history = { messages: {}, currentId: null };
 		}
+		const nextId = chatIdProp || $chatId;
+		const joinGate =
+			$socket?.connected && joinedChatId !== nextId ? createInitialChatRead(nextId, signal) : null;
+		initialChatRead = joinGate;
 		const initialHistory = { ...history, messages: { ...history.messages } };
 		noteChatDebug('loadChat start');
 		// chatIdProp is empty for chats started from the home page (URL set via replaceState)
@@ -3005,7 +3015,10 @@
 			temporaryChatEnabled.set(false);
 		}
 
+		await joinGate?.waitForJoin();
+		if (signal.aborted) return;
 		const id = $chatId;
+		const tagsPromise = getTagsById(localStorage.token, id, signal).catch(() => []);
 		const loadedChat = await getChatById(localStorage.token, id, signal).catch(async (error) => {
 			console.error('[note-chat] getChatById failed', {
 				chatIdProp,
@@ -3023,14 +3036,18 @@
 		});
 
 		if (loadedChat) {
-			const loadedTags = await getTagsById(localStorage.token, id, signal).catch(async (error) => {
-				console.warn('[note-chat] getTagsById failed; continuing without tags', {
-					chatIdProp,
-					activeChatId: $chatId,
-					error
+			const activeTaskIds = taskIds;
+			const tasksPromise = getTaskIdsByChatId(localStorage.token, id, signal)
+				.then((res) => res?.task_ids ?? [])
+				.catch((error) => {
+					console.warn('[note-chat] getTaskIdsByChatId failed; continuing without tasks', {
+						chatIdProp,
+						activeChatId: $chatId,
+						error
+					});
+					return [];
 				});
-				return [];
-			});
+			const loadedTags = await tagsPromise;
 			if (signal.aborted) return;
 			chat = loadedChat;
 			tags = loadedTags;
@@ -3126,18 +3143,8 @@
 				// Reconcile active tasks with message state:
 				// If the response is already done, remaining tasks are just background
 				// work (follow-ups, title gen) that shouldn't block the input.
-				const activeTaskIds = taskIds;
 				const currentMessage = history.currentId ? history.messages[history.currentId] : null;
-				const pendingTaskIds = await getTaskIdsByChatId(localStorage.token, id, signal)
-					.then((res) => res?.task_ids ?? [])
-					.catch((error) => {
-						console.warn('[note-chat] getTaskIdsByChatId failed; continuing without tasks', {
-							chatIdProp,
-							activeChatId: $chatId,
-							error
-						});
-						return [];
-					});
+				const pendingTaskIds = await tasksPromise;
 				if (signal.aborted) return;
 				noteChatDebug('task reconciliation completed', {
 					pendingTaskCount: pendingTaskIds.length,
