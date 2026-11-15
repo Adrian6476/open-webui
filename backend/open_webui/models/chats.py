@@ -22,6 +22,7 @@ from open_webui.models.chat_messages import ChatMessage, ChatMessages
 from open_webui.models.folders import Folders
 from open_webui.models.tags import Tag, TagModel, Tags
 from open_webui.utils.misc import get_output_text, sanitize_data_for_db, sanitize_text_for_db
+from open_webui.utils.chat_search import postgres_legacy_content_match_sql
 from pydantic import BaseModel, ConfigDict, field_validator
 from sqlalchemy import (
     JSON,
@@ -126,30 +127,17 @@ def chat_search_message_content_match_sql(dialect_name: str, key: str) -> str:
         """
 
     if dialect_name == 'postgresql':
+        pattern = "'%' || :" + key + " || '%'"
+        legacy_match = postgres_legacy_content_match_sql('Chat', pattern)
         return f"""
         (
             EXISTS (
-                SELECT 1
-                FROM chat_message AS message
+                SELECT 1 FROM chat_message AS message
                 WHERE message.chat_id = Chat.id
                 AND message.user_id = Chat.user_id
-                AND json_typeof(message.content) = 'string'
-                AND LOWER(message.content #>> '{{}}') LIKE '%' || :{key} || '%'
+                AND message.owui_search_text LIKE {pattern}
             )
-            OR EXISTS (
-                SELECT 1
-                FROM json_each(CASE WHEN json_typeof(Chat.chat#>'{{history,messages}}') = 'object'
-                    THEN Chat.chat#>'{{history,messages}}' ELSE '{{}}'::json END) AS history_message
-                WHERE json_typeof(history_message.value->'content') = 'string'
-                AND LOWER(history_message.value->>'content') LIKE '%' || :{key} || '%'
-            )
-            OR EXISTS (
-                SELECT 1
-                FROM json_array_elements(CASE WHEN json_typeof(Chat.chat->'messages') = 'array'
-                    THEN Chat.chat->'messages' ELSE '[]'::json END) AS legacy_message
-                WHERE json_typeof(legacy_message->'content') = 'string'
-                AND LOWER(legacy_message->>'content') LIKE '%' || :{key} || '%'
-            )
+            OR {legacy_match}
         )
         """
 
@@ -2388,7 +2376,7 @@ class ChatTable:
 
             elif dialect_name == 'postgresql':
                 # Safety filter: JSON field must not contain \u0000
-                stmt = stmt.filter(text("Chat.chat::text NOT LIKE '%\\\\u0000%'"))
+                stmt = stmt.filter(text('Chat.owui_search_safe'))
 
                 # Safety filter: title must not contain actual null bytes
                 stmt = stmt.filter(text("Chat.title::text NOT LIKE '%\\x00%'"))

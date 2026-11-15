@@ -29,3 +29,30 @@ npm run build
 Use the existing upstream Dockerfile for source builds; `USE_CUDA=true` selects
 the home deployment's CUDA variant. Home Compose orchestration remains in
 `/home/adrian/docker` and points its build context to this checkout.
+
+## PostgreSQL chat search
+
+The search changes are in `routers/search.py`, `models/chats.py`,
+`utils/chat_search.py` and migration `b72c4a9e31d6` under
+`backend/open_webui/`. PostgreSQL uses STORED search projections; SQLite keeps
+its existing query/schema behavior. Keep generated columns out of portable ORM
+insert payloads, preserve both APIs' different partial-import/ownership rules,
+and confirm joined-text prefilters against individual messages. Do not remove
+sharing checks, snapshot boundaries or Chinese short substring matching.
+
+See `docs/chat-search.md` for the migration's table-rewrite/locking costs,
+extension-permission fallback, measurements and rollback. Switching to an older
+upstream image requires downgrading this fork's Alembic revision first; preserve
+applied IDs and reconcile future upstream migration heads deliberately.
+
+Backend checks (use a disposable empty PostgreSQL database, never deployment
+credentials):
+
+```bash
+PYTHONPATH=backend ENABLE_DB_MIGRATIONS=false WEBUI_SECRET_KEY=isolated-tests-only \
+  DATABASE_URL=postgresql://postgres@localhost/chat_search_test \
+  CHAT_SEARCH_TEST_DATABASE_URL=postgresql://postgres@localhost/chat_search_test \
+  python -m unittest discover -s backend/tests -v
+ruff format --check backend
+ruff check --select=F --ignore=F401,F403,F405,F541,F811,F841 backend
+```

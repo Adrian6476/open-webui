@@ -18,6 +18,7 @@ from open_webui.models.shared_chats import SharedChat
 from open_webui.models.users import User
 from open_webui.utils.access_control import has_permission
 from open_webui.utils.auth import get_verified_user
+from open_webui.utils.chat_search import postgres_legacy_content_match_sql
 from pydantic import BaseModel, Field
 from sqlalchemy import BigInteger, and_, case, cast, func, literal, or_, select, text, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -112,11 +113,15 @@ def message_match_sql(table: str, dialect: str, key: str):
         for source in sources
     )
     if table == 'chat':
-        # shortcut: partial imports use their existing rows; reconcile them when writes become atomic.
+        # Partial imports retain the current normalized-row-first behavior.
+        content = 'm.owui_search_text' if dialect == 'postgresql' else f'lower({row_content})'
+        fallback = (
+            postgres_legacy_content_match_sql(table, ':' + key) if dialect == 'postgresql' else f'({legacy_match})'
+        )
         return text(
             'CASE WHEN EXISTS (SELECT 1 FROM chat_message WHERE chat_id = chat.id) '
             'THEN EXISTS (SELECT 1 FROM chat_message AS m WHERE m.chat_id = chat.id '
-            f"AND lower({row_content}) LIKE :{key} ESCAPE '\\') ELSE ({legacy_match}) END"
+            f"AND {content} LIKE :{key} ESCAPE '\\') ELSE {fallback} END"
         )
     return text(f'({legacy_match})')
 
