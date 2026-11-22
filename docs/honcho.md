@@ -35,7 +35,14 @@ Captured text is removed from delivered queue rows. Source edits after a
 message was accepted do not rewrite existing Honcho messages automatically;
 use a correction and inspect provenance when needed.
 
-Tests: `python -m unittest discover -s backend/tests -p test_honcho.py -v`
+The application gives connector reads 20 seconds, exceeding its bounded
+15-second upstream request. The connector reads profile/context and conclusion
+lists concurrently. Successful memory tools identify their backend as Honcho;
+failed reads return explicit unavailable status and must not be interpreted as
+an empty memory store. Failed automatic prefetch also includes that distinction
+in the memory context so the model does not silently substitute other sources.
+
+Tests: `python -m unittest discover -s backend/tests -p 'test_honcho*.py' -v`
 with the project's normal Python dependencies, an isolated environment and
 no production database configuration. Deployment's connector has independent
 fake-backend HTTP/queue protocol tests. Verify native function calling and

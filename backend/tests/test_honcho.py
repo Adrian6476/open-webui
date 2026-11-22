@@ -91,6 +91,23 @@ class HonchoPolicyTest(unittest.IsolatedAsyncioTestCase):
             self.assertIn('error', result)
             call.assert_not_awaited()
 
+    async def test_prefetch_failure_is_not_silently_presented_as_no_memory(self):
+        fake_misc = SimpleNamespace(
+            get_content_from_message=lambda message: message.get('content', ''),
+            get_last_user_message_item=lambda messages: messages[-1],
+        )
+        with (
+            patch.dict(sys.modules, {'open_webui.utils.misc': fake_misc}),
+            patch.object(self.module, 'connector', AsyncMock(side_effect=Exception('synthetic timeout'))),
+        ):
+            result = await self.module.recall(
+                self.request, self.user, [{'role': 'user', 'content': 'synthetic'}], self.model
+            )
+            self.assertIn('Honcho shared memory', result)
+            self.assertIn('does not mean the memory is empty', result)
+            self.metadata['features']['memory'] = False
+            self.assertEqual(await self.module.recall(self.request, self.user, [], self.model), '')
+
     async def test_capture_never_backfills_previous_turns_or_regenerations(self):
         self.record.meta.honcho_write_enabled = True
         messages = [

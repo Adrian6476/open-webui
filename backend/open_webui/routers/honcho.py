@@ -16,4 +16,4 @@ async def backend(user=Depends(get_verified_user)):
 async def profile(request: Request, user=Depends(get_verified_user)):
     if not enrolled(user):
         raise HTTPException(403, 'Shared memory is not enabled for this account.')
-    return await connector('GET', '/profile', timeout=15)
+    return await connector('GET', '/profile')

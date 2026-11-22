@@ -48,6 +48,11 @@ the existing `recall_memories` name and relay contract. Deployment, connector,
 credential handling and migration evidence live in `/home/adrian/docker`.
 Run isolated `backend/tests/test_honcho.py` and connector tests in addition to
 the relevant existing checks. See `docs/honcho.md` for behavior and limitations.
+Honcho connector reads must outlast its bounded 15-second upstream request;
+the application read timeout is 20 seconds. Preserve nonempty backend-specific
+failure results: unavailable memory must never be represented as an empty
+memory store. Registry regression tests exercise actual tool execution with a
+slow or timed-out connector, in addition to checking tool registration.
 
 ## PostgreSQL chat search
 

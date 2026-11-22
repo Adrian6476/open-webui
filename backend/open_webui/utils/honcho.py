@@ -15,6 +15,11 @@ from fastapi import HTTPException
 
 log = logging.getLogger(__name__)
 
+# The connector permits a 15-second upstream read. The application must not
+# abandon a healthy read before the connector's own bounded request completes.
+READ_TIMEOUT = 20
+UNAVAILABLE = 'Honcho shared memory is temporarily unavailable. This does not mean the memory is empty. Retry the memory tool; do not infer missing facts or substitute unrelated sources.'
+
 
 def enrolled(user) -> bool:
     uid = user.get('id') if isinstance(user, dict) else getattr(user, 'id', None)
@@ -71,14 +76,20 @@ async def policy(request, user, model=None, metadata=None) -> str:
     )
 
 
-async def connector(method: str, path: str, payload=None, *, timeout=5):
+async def connector(method: str, path: str, payload=None, *, timeout=READ_TIMEOUT):
     url = os.environ['HONCHO_CONNECTOR_URL'].rstrip('/')
     key = os.environ['HONCHO_CONNECTOR_KEY']
-    async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
-        response = await client.request(method, url + path, json=payload, headers={'Authorization': f'Bearer {key}'})
+    try:
+        async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
+            response = await client.request(
+                method, url + path, json=payload, headers={'Authorization': f'Bearer {key}'}
+            )
+    except httpx.RequestError as error:
+        log.warning('Honcho connector request failed (%s, %s).', path, type(error).__name__)
+        raise HTTPException(503, UNAVAILABLE) from None
     if response.is_error:
         # Never expose upstream text or chat contents in logs/model-visible errors.
-        raise HTTPException(503, 'Shared memory is temporarily unavailable.')
+        raise HTTPException(503, UNAVAILABLE)
     return response.json() if response.content else {}
 
 
@@ -94,7 +105,7 @@ async def recall(request, user, messages, model):
         return result.get('context', '')[:6000]
     except Exception:
         log.warning('Honcho recall unavailable; continuing without shared memory.')
-        return ''
+        return '<memory_context>\nBackend: Honcho shared memory.\n' + UNAVAILABLE + '\n</memory_context>'
 
 
 async def capture(request, user, model, metadata, messages, assistant_message):
