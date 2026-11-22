@@ -813,18 +813,35 @@ async def get_builtin_tools(
         and get_model_capability('memory')
         and await has_user_permission('memories')
     ):
-        builtin_functions.extend(
-            [
-                search_memories,
-                list_memory_paths,
-                read_memory_path,
-                list_memories,
-                update_memory,
-                add_memory,
-                replace_memory_content,
-                delete_memory,
-            ]
-        )
+        from open_webui.utils import honcho
+
+        if honcho.enrolled(user):
+            from open_webui.tools import honcho as shared_memory_tools
+
+            mode = await honcho.policy(request, user, model, extra_params.get('__metadata__') or {})
+            if mode in {'read', 'write'}:
+                builtin_functions.extend([shared_memory_tools.search_memories, shared_memory_tools.list_memories])
+            if mode == 'write':
+                builtin_functions.extend(
+                    [
+                        shared_memory_tools.add_memory,
+                        shared_memory_tools.replace_memory_content,
+                        shared_memory_tools.delete_memory,
+                    ]
+                )
+        else:
+            builtin_functions.extend(
+                [
+                    search_memories,
+                    list_memory_paths,
+                    read_memory_path,
+                    list_memories,
+                    update_memory,
+                    add_memory,
+                    replace_memory_content,
+                    delete_memory,
+                ]
+            )
 
     # Add web search tools if builtin category enabled AND enabled globally AND model has web_search capability
     if (

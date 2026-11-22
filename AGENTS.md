@@ -30,6 +30,25 @@ Use the existing upstream Dockerfile for source builds; `USE_CUDA=true` selects
 the home deployment's CUDA variant. Home Compose orchestration remains in
 `/home/adrian/docker` and points its build context to this checkout.
 
+## Account-specific Honcho memory
+
+`utils/honcho.py` binds the explicitly enrolled administrator account to the
+private connector. Other users retain native memory. The per-model
+`meta.honcho_write_enabled` flag defaults false; administrators alone can
+change it through create/update/import/restore paths. The stored model entry,
+not client capabilities, decides write permission. Enforce it both when
+registering tools and when executing them/capturing completions. Temporary,
+internal, direct, automation and task traffic is excluded. Capture only the
+current finalized turn, never regenerate/backfill excluded history.
+
+The model editor exposes the update toggle; Personalization shows the shared
+profile for enrolled accounts while retaining native rows as rollback data.
+`routers/honcho.py` must reject other accounts. Native Responses prefetch keeps
+the existing `recall_memories` name and relay contract. Deployment, connector,
+credential handling and migration evidence live in `/home/adrian/docker`.
+Run isolated `backend/tests/test_honcho.py` and connector tests in addition to
+the relevant existing checks. See `docs/honcho.md` for behavior and limitations.
+
 ## PostgreSQL chat search
 
 The search changes are in `routers/search.py`, `models/chats.py`,

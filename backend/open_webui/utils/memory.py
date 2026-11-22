@@ -288,6 +288,10 @@ def model_allows_memory(model: dict | None) -> bool:
 
 
 async def recall_memories(request, messages: list[dict], user, model: dict | None = None) -> str:
+    from open_webui.utils import honcho
+
+    if honcho.enrolled(user):
+        return await honcho.recall(request, user, messages, model)
     if not model_allows_memory(model):
         return ''
 
@@ -421,6 +425,11 @@ async def review_memory_after_turn(
     assistant_message: dict,
     messages: list[dict],
 ) -> None:
+    from open_webui.utils import honcho
+
+    if honcho.enrolled(user):
+        await honcho.capture(request, user, model, metadata, messages, assistant_message)
+        return
     if not model_allows_memory(model):
         return
 

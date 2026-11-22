@@ -2,7 +2,7 @@
 	import { getContext } from 'svelte';
 	import type { Writable } from 'svelte/store';
 	import type { i18n as i18nType } from 'i18next';
-	import { config, visibleControls } from '$lib/stores';
+	import { config, user, visibleControls } from '$lib/stores';
 	import ModelSettingsSection from './ModelSettingsSection.svelte';
 	import ModelSettingToggle from './ModelSettingToggle.svelte';
 	import BuiltinTools from './BuiltinTools.svelte';
@@ -77,6 +77,7 @@
 	export let defaultFeatureIds: string[] = [];
 	export let builtinTools: Record<string, boolean> = {};
 	export let disabled = false;
+	export let honchoWriteEnabled = false;
 	const featureKeys = ['web_search', 'image_generation', 'code_interpreter'] as const;
 	$: hasTerminal =
 		$config?.features?.enable_terminal_servers || $config?.features?.enable_direct_integrations;
@@ -126,6 +127,19 @@
 					/>
 				{/each}
 			</div>
+		</ModelSettingsSection>
+	{/if}
+	{#if $user?.role === 'admin' && effectiveCapabilities.memory !== false}
+		<ModelSettingsSection label={$i18n.t('Honcho memory')}>
+			<ModelSettingToggle
+				label={$i18n.t('Allow Honcho memory updates')}
+				description={$i18n.t(
+					'Allow this model to save conversations and update shared memory. When off, shared memory is read-only. Applies only to accounts using Honcho.'
+				)}
+				checked={honchoWriteEnabled}
+				on:change={(e) => (honchoWriteEnabled = e.detail)}
+				{disabled}
+			/>
 		</ModelSettingsSection>
 	{/if}
 

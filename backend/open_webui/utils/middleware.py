@@ -2227,6 +2227,10 @@ async def process_chat_payload(request, form_data, user, metadata, model):
         '__chat_id__': metadata.get('chat_id'),
         '__message_id__': metadata.get('message_id'),
     }
+    from open_webui.utils import honcho
+
+    if honcho.enrolled(user) and '_honcho_write_at_start' not in metadata:
+        metadata['_honcho_write_at_start'] = await honcho.policy(request, user, model, metadata) == 'write'
     # Initialize events to store additional event to be sent to the client
     # Initialize contexts and citation
     if getattr(request.state, 'direct', False) and hasattr(request.state, 'model'):

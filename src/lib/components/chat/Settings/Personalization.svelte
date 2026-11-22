@@ -20,6 +20,7 @@
 	import Search from '$lib/components/icons/Search.svelte';
 	import Trash from '$lib/components/icons/Trash.svelte';
 	import XMark from '$lib/components/icons/XMark.svelte';
+	import { WEBUI_API_BASE_URL } from '$lib/constants';
 
 	const dispatch = createEventDispatcher();
 
@@ -31,6 +32,21 @@
 	let enableMemory = false;
 	let memories: Memory[] = [];
 	let loadingMemories = true;
+	let memoryBackend = 'loading';
+	let sharedProfile: { card?: string[]; conclusions?: { content: string }[] } | null = null;
+	let profileError = '';
+	const loadSharedProfile = async () => {
+		profileError = '';
+		try {
+			const res = await fetch(`${WEBUI_API_BASE_URL}/honcho/profile`, {
+				headers: { Authorization: `Bearer ${localStorage.token}` }
+			});
+			if (!res.ok) throw new Error($i18n.t('Shared memory is temporarily unavailable.'));
+			sharedProfile = await res.json();
+		} catch (error) {
+			profileError = String(error);
+		}
+	};
 
 	let showMemoryModal = false;
 	let selectedMemory: Memory | null = null;
@@ -98,7 +114,18 @@
 
 	onMount(async () => {
 		enableMemory = $settings?.memory ?? $config?.features?.enable_memories ?? false;
-		await loadMemories();
+		try {
+			const res = await fetch(`${WEBUI_API_BASE_URL}/honcho/backend`, {
+				headers: { Authorization: `Bearer ${localStorage.token}` }
+			});
+			if (!res.ok) throw new Error('Memory backend unavailable');
+			memoryBackend = (await res.json()).backend;
+			if (memoryBackend === 'honcho') await loadSharedProfile();
+			else await loadMemories();
+		} catch (error) {
+			memoryBackend = 'error';
+			profileError = String(error);
+		}
 	});
 </script>
 
@@ -141,7 +168,29 @@
 				/>
 			</UserSettingRow>
 
-			{#if enableMemory}
+			{#if enableMemory && memoryBackend === 'honcho'}
+				<div class="space-y-3 text-xs">
+					<p>
+						{$i18n.t(
+							'Honcho memory is shared with your other assistants. Model settings control whether conversations can update it. Your previous local memories are retained separately.'
+						)}
+					</p>
+					<button type="button" class={actionButtonClass} on:click={loadSharedProfile}
+						>{$i18n.t('Refresh')}</button
+					>
+					{#if profileError}<p role="alert">{profileError}</p>{/if}
+					{#each sharedProfile?.card ?? [] as fact}<p class="whitespace-pre-wrap break-words">
+							{fact}
+						</p>{/each}
+					{#each sharedProfile?.conclusions ?? [] as fact}<p
+							class="whitespace-pre-wrap break-words"
+						>
+							{fact.content}
+						</p>{/each}
+				</div>
+			{:else if enableMemory && memoryBackend === 'error'}
+				<p role="alert" class="text-xs">{profileError}</p>
+			{:else if enableMemory && memoryBackend === 'native'}
 				<div>
 					<div class="mb-1 flex items-center">
 						<div class="text-xs text-gray-600 dark:text-gray-400">

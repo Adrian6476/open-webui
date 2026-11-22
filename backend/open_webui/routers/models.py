@@ -75,6 +75,9 @@ def model_response(model):
 
 
 async def _check_model_controls(form, previous, user, request):
+    from open_webui.utils.honcho import check_model_setting
+
+    check_model_setting(form, previous, user)
     old = previous.params.model_dump().get('model_controls', {}) if previous else {}
     if 'model_controls' not in form.params.model_fields_set:
         if old:

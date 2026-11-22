@@ -207,6 +207,7 @@
 		base_model_id: null,
 		name: '',
 		meta: {
+			honcho_write_enabled: false,
 			// LICENSE covers this Open WebUI fallback logo.
 			// Do not alter, remove, obscure, or replace it except as LICENSE permits:
 			// https://docs.openwebui.com/license.
@@ -251,6 +252,7 @@
 	let defaultFilterIds = [];
 
 	let capabilities = { ...DEFAULT_CAPABILITIES };
+	let honchoWriteEnabled = false;
 	let defaultFeatureIds = [];
 	let builtinTools: Record<string, boolean> = {};
 
@@ -426,6 +428,7 @@
 		if (edit) delete modelInfo.access_grants;
 		else modelInfo.access_grants = accessGrants;
 		modelInfo.meta.capabilities = capabilities;
+		modelInfo.meta.honcho_write_enabled = honchoWriteEnabled;
 		if (subagents.model_ids.length > 0) {
 			modelInfo.meta.subagents = { model_ids: subagents.model_ids };
 		} else {
@@ -743,6 +746,7 @@
 			actionIds = model?.meta?.actionIds ?? [];
 
 			// Per-model overrides take precedence over admin defaults
+			honchoWriteEnabled = model?.meta?.honcho_write_enabled === true;
 			capabilities = {
 				...DEFAULT_CAPABILITIES,
 				...(defaultMeta.capabilities ?? {}),
@@ -1737,6 +1741,7 @@
 									<div class="space-y-0.5">
 										<Capabilities
 											bind:capabilities
+											bind:honchoWriteEnabled
 											functionCalling={params.function_calling ?? defaultFunctionCalling}
 											bind:defaultFeatureIds
 											bind:builtinTools
